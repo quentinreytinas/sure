@@ -18,7 +18,15 @@ class DragAndDropImportTest < ApplicationSystemTestCase
 
     file_path = file_fixture("imports/transactions.csv")
 
-    attach_file "import[import_file]", file_path, make_visible: true
+    execute_script("
+      var form = document.querySelector('form[action=\"#{imports_path}\"]');
+      form.classList.remove('hidden');
+      var input = document.querySelector('input[name=\"import[import_file]\"]');
+      input.classList.remove('hidden');
+      input.style.display = 'block';
+    ")
+
+    attach_file "import[import_file]", file_path
 
     # Submit the form manually since we bypassed the 'drop' event listener which triggers submit
     find("form[action='#{imports_path}']").evaluate_script("this.requestSubmit()")
