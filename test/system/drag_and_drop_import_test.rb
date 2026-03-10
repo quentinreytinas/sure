@@ -9,7 +9,7 @@ class DragAndDropImportTest < ApplicationSystemTestCase
     visit transactions_path
 
     assert_selector "#transactions[data-controller*='drag-and-drop-import']"
-    assert_selector "form[action='#{imports_path}']"
+    assert_selector "form[action='#{imports_path}']", visible: :all
     assert_selector "input[name='import[import_file]']", visible: :all
 
     # We can't easily simulate a true native drag-and-drop in headless chrome via Capybara without complex JS.
