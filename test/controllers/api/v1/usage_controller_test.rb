@@ -2,6 +2,8 @@ require "test_helper"
 
 class Api::V1::UsageControllerTest < ActionDispatch::IntegrationTest
   setup do
+    Rails.configuration.stubs(:app_mode).returns("managed".inquiry)
+
     @user = users(:family_admin)
     # Destroy any existing active API keys for this user
     @user.api_keys.active.destroy_all

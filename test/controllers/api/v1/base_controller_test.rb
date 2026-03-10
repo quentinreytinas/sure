@@ -4,6 +4,8 @@ require "test_helper"
 
 class Api::V1::BaseControllerTest < ActionDispatch::IntegrationTest
   setup do
+    Rails.configuration.stubs(:app_mode).returns("managed".inquiry)
+
     @user = users(:family_admin)
     @oauth_app = Doorkeeper::Application.create!(
       name: "Test API App",
