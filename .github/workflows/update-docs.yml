@@ -9,7 +9,21 @@ jobs:
   update-docs:
     runs-on: ubuntu-latest
     steps:
+      - name: Check Mintlify configuration
+        id: mintlify_config
+        env:
+          MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+          PROJECT_ID: ${{ secrets.MINTLIFY_PROJECT_ID }}
+        run: |
+          if [ -n "${MINTLIFY_API_KEY}" ] && [ -n "${PROJECT_ID}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Mintlify secrets are not configured; skipping docs update."
+          fi
+
       - uses: actions/github-script@v8
+        if: steps.mintlify_config.outputs.configured == 'true'
         env:
           MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
           PROJECT_ID: ${{ secrets.MINTLIFY_PROJECT_ID }}
@@ -18,11 +32,6 @@ jobs:
             const { owner, repo } = context.repo;
             const projectId = process.env.PROJECT_ID;
             const apiKey = process.env.MINTLIFY_API_KEY;
-
-            if (!projectId || !apiKey) {
-              core.setFailed('Missing MINTLIFY_PROJECT_ID or MINTLIFY_API_KEY secrets');
-              return;
-            }
 
             const url = `https://api.mintlify.com/v1/agent/${projectId}/job`;
             const payload = {
