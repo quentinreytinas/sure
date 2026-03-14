@@ -70,6 +70,14 @@ class ApiRateLimiter
     limit(api_key).usage_info
   end
 
+  def self.redis_key_for(api_key)
+    key = "api_rate_limit:#{api_key.id}"
+    return key unless Rails.env.test?
+
+    database_name = ActiveRecord::Base.connection_db_config.database
+    "#{key}:#{database_name}"
+  end
+
   def self.limit(api_key)
     if Rails.application.config.app_mode.self_hosted?
       # Use NoopApiRateLimiter for self-hosted mode
@@ -83,7 +91,7 @@ class ApiRateLimiter
   private
 
     def redis_key
-      "api_rate_limit:#{@api_key.id}"
+      self.class.redis_key_for(@api_key)
     end
 
     def determine_tier
