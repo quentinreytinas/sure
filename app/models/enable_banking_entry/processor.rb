@@ -3,6 +3,10 @@ require "digest/md5"
 class EnableBankingEntry::Processor
   include CurrencyNormalizable
   CARD_REFERENCE_PATTERN = /\ACARD-\d+\z/i
+  GENERIC_CARD_PAYMENT_PATTERNS = [
+    /\APAIEMENT\s+(CB|PSC)\b/i,
+    /\ACARD\s+PAYMENT\b/i
+  ].freeze
   REFERENCE_PATTERNS = [
     CARD_REFERENCE_PATTERN,
     /\A(?=.*\d)[A-Z0-9]{10,}\z/,
@@ -130,10 +134,12 @@ class EnableBankingEntry::Processor
       candidates = remittance_lines.map { |line| cleanup_remittance_line(line) }.compact
       return nil if candidates.empty?
 
-      non_reference_candidates = candidates.reject { |candidate| reference_like?(candidate) }
+      non_reference_candidates = candidates.reject do |candidate|
+        reference_like?(candidate) || generic_card_payment_header?(candidate)
+      end
       pool = non_reference_candidates.presence || candidates
 
-      return nil if pool.all? { |candidate| technical_remittance_candidate?(candidate) }
+      return nil if pool.all? { |candidate| reference_like?(candidate) }
 
       pool.max_by { |candidate| remittance_candidate_score(candidate) }
     end
@@ -178,10 +184,18 @@ class EnableBankingEntry::Processor
       return false if normalized_description.casecmp?(normalized_remittance)
 
       reference_like?(normalized_description) ||
+        generic_card_payment_header?(normalized_description) ||
         (
           significantly_more_informative?(normalized_remittance, normalized_description) &&
           !more_technical_than?(normalized_remittance, normalized_description)
         )
+    end
+
+    def generic_card_payment_header?(value)
+      normalized = value.to_s.strip
+      return false if normalized.blank?
+
+      GENERIC_CARD_PAYMENT_PATTERNS.any? { |pattern| normalized.match?(pattern) }
     end
 
     def reference_like?(value)
