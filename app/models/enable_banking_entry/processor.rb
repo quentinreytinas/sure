@@ -21,12 +21,31 @@ class EnableBankingEntry::Processor
     /\s+CARTE\s+\d+\z/i,
     /\s+CARD\s+\d+\z/i
   ].freeze
+  CUSTOMER_REFERENCE_DESCRIPTION_PATTERNS = [
+    /(?:^|[\s-])r[eé]f[eé]rence\s+client\b/i,
+    /(?:^|[\s-])ref(?:erence)?\s+client\b/i,
+    /\bclient\s+reference\b/i
+  ].freeze
+  EXPANDED_BANKING_ACTION_PATTERNS = [
+    /\bpr[eé]l[eè]vement\b/i,
+    /\bvirement\b/i
+  ].freeze
+  ABBREVIATED_BANKING_HEADER_PATTERNS = [
+    /\A(?:PRLV|VIR)\b/i
+  ].freeze
+  PERSONAL_COUNTERPARTY_PATTERNS = [
+    /\A(?:M|MME|MLLE|MONSIEUR|MADAME|MADEMOISELLE)\b/i,
+    /\A(?:M|MME)\s+OU\s+(?:M|MME)\b/i,
+    /\A(?:MR|MRS|MS)\b/i
+  ].freeze
   INFORMATIVENESS_DELTA_THRESHOLD = 4
   REMITTANCE_TECHNICALITY_THRESHOLD = 7
   TECHNICAL_REFERENCE_BONUS = 3
   TECHNICAL_UPPERCASE_RATIO_THRESHOLD = 0.8
   TECHNICAL_UPPERCASE_RATIO_MIN_WORDS = 3
   TECHNICAL_UPPERCASE_RATIO_BONUS = 2
+  EXPANDED_BANKING_ACTION_BONUS = 3
+  ABBREVIATED_BANKING_HEADER_PENALTY = 2
 
   # enable_banking_transaction is the raw hash fetched from Enable Banking API
   # Transaction structure from Enable Banking:
@@ -94,9 +113,9 @@ class EnableBankingEntry::Processor
 
     def name
       description = data[:description] || data[:transaction_description]
-      remittance_name = remittance_name_candidate
 
       if description.present?
+        remittance_name = remittance_name_candidate(excluding: [description])
         return remittance_name if prefer_remittance_name?(description, remittance_name)
         return description
       end
@@ -109,7 +128,16 @@ class EnableBankingEntry::Processor
       else
         data.dig(:creditor, :name) || data[:creditor_name]
       end
+      remittance_name = remittance_name_candidate(excluding: [description, counterparty])
       counterparty_is_card_reference = counterparty.to_s.match?(CARD_REFERENCE_PATTERN)
+      counterparty_looks_personal = personal_counterparty?(counterparty)
+
+      if remittance_name.present? &&
+          counterparty_looks_personal &&
+          !reference_like?(remittance_name) &&
+          !customer_reference_like?(remittance_name)
+        return remittance_name
+      end
 
       if counterparty.present? && !counterparty_is_card_reference
         return counterparty
@@ -130,14 +158,25 @@ class EnableBankingEntry::Processor
       credit_debit_indicator == "CRDT" ? "Incoming Transfer" : "Outgoing Transfer"
     end
 
-    def remittance_name_candidate
+    def remittance_name_candidate(excluding: [])
+      excluded_values = Array(excluding).filter_map do |value|
+        normalized = value.to_s.strip
+        normalized.presence&.downcase
+      end
+
       candidates = remittance_lines.map { |line| cleanup_remittance_line(line) }.compact
+      filtered_candidates = candidates.reject do |candidate|
+        excluded_values.include?(candidate.to_s.strip.downcase)
+      end
+      candidates = filtered_candidates if filtered_candidates.present?
       return nil if candidates.empty?
 
       non_reference_candidates = candidates.reject do |candidate|
         reference_like?(candidate) || generic_card_payment_header?(candidate)
       end
       pool = non_reference_candidates.presence || candidates
+      non_customer_reference_candidates = pool.reject { |candidate| customer_reference_like?(candidate) }
+      pool = non_customer_reference_candidates.presence || pool
 
       return nil if pool.all? { |candidate| reference_like?(candidate) }
 
@@ -145,7 +184,10 @@ class EnableBankingEntry::Processor
     end
 
     def remittance_candidate_score(value)
-      informativeness_score(value) - technicality_score(value)
+      score = informativeness_score(value) - technicality_score(value)
+      score += EXPANDED_BANKING_ACTION_BONUS if expanded_banking_action?(value)
+      score -= ABBREVIATED_BANKING_HEADER_PENALTY if abbreviated_banking_header?(value)
+      score
     end
 
     def technical_remittance_candidate?(value)
@@ -184,6 +226,7 @@ class EnableBankingEntry::Processor
       return false if normalized_description.casecmp?(normalized_remittance)
 
       reference_like?(normalized_description) ||
+        customer_reference_like?(normalized_description) ||
         generic_card_payment_header?(normalized_description) ||
         (
           significantly_more_informative?(normalized_remittance, normalized_description) &&
@@ -196,6 +239,35 @@ class EnableBankingEntry::Processor
       return false if normalized.blank?
 
       GENERIC_CARD_PAYMENT_PATTERNS.any? { |pattern| normalized.match?(pattern) }
+    end
+
+    def customer_reference_like?(value)
+      normalized = value.to_s.strip
+      return false if normalized.blank?
+
+      CUSTOMER_REFERENCE_DESCRIPTION_PATTERNS.any? { |pattern| normalized.match?(pattern) }
+    end
+
+    def expanded_banking_action?(value)
+      normalized = value.to_s.strip
+      return false if normalized.blank?
+
+      EXPANDED_BANKING_ACTION_PATTERNS.any? { |pattern| normalized.match?(pattern) }
+    end
+
+    def abbreviated_banking_header?(value)
+      normalized = value.to_s.strip
+      return false if normalized.blank?
+
+      ABBREVIATED_BANKING_HEADER_PATTERNS.any? { |pattern| normalized.match?(pattern) } &&
+        !expanded_banking_action?(normalized)
+    end
+
+    def personal_counterparty?(value)
+      normalized = value.to_s.strip
+      return false if normalized.blank?
+
+      PERSONAL_COUNTERPARTY_PATTERNS.any? { |pattern| normalized.match?(pattern) }
     end
 
     def reference_like?(value)

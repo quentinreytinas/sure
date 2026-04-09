@@ -157,4 +157,45 @@ class EnableBankingEntry::ProcessorTest < ActiveSupport::TestCase
 
     assert_equal "EMINZA", name
   end
+
+  test "prefers clearer remittance detail over customer reference description" do
+    name = build_name(
+      credit_debit_indicator: "DBIT",
+      description: "TE ET GAZ FRANCE-REFERENCE CLIENT 1",
+      remittance_information: [
+        "TE ET GAZ FRANCE-REFERENCE CLIENT 1",
+        "PRELEVEMENT TOTALENERGIES ELECTRICI"
+      ]
+    )
+
+    assert_equal "PRELEVEMENT TOTALENERGIES ELECTRICI", name
+  end
+
+  test "prefers expanded banking action over abbreviated header in remittance only payload" do
+    name = build_name(
+      credit_debit_indicator: "DBIT",
+      remittance_information: [
+        "PRLV SEPA TOTALENERGIES ELECTRI",
+        "0115845566-222104406703",
+        "PRELEVEMENT TOTALENERGIES ELECTRICI",
+        "TE ET GAZ FRANCE-REFERENCE CLIENT 1"
+      ]
+    )
+
+    assert_equal "PRELEVEMENT TOTALENERGIES ELECTRICI", name
+  end
+
+  test "prefers useful remittance over personal counterparty name" do
+    name = build_name(
+      credit_debit_indicator: "CRDT",
+      debtor_name: "MME REYTINAS MARINE",
+      remittance_information: [
+        "VIR GENERATION",
+        "174947812",
+        "MME REYTINAS MARINE"
+      ]
+    )
+
+    assert_equal "VIR GENERATION", name
+  end
 end
