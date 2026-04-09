@@ -37,6 +37,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 permissions:
   contents: write
@@ -67,7 +68,7 @@ jobs:
 
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v4.2.0
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
 
@@ -153,7 +154,7 @@ jobs:
 
       - name: Upload the Docker image digest
         if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'schedule' || github.event.inputs.push }}
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v6
         with:
           name: digest-${{ matrix.platform }}
           path: ${{ runner.temp }}/digests/*
@@ -176,7 +177,7 @@ jobs:
         uses: docker/setup-buildx-action@v3.10.0
 
       - name: Download Docker image digests
-        uses: actions/download-artifact@v4.3.0
+        uses: actions/download-artifact@v6
         with:
           path: ${{ runner.temp }}/digests
           pattern: digest-*
@@ -259,13 +260,13 @@ jobs:
 
     steps:
       - name: Download Android APK artifact
-        uses: actions/download-artifact@v4.3.0
+        uses: actions/download-artifact@v6
         with:
           name: app-release-apk
           path: ${{ runner.temp }}/mobile-artifacts
 
       - name: Download iOS build artifact
-        uses: actions/download-artifact@v4.3.0
+        uses: actions/download-artifact@v6
         with:
           name: ios-build-unsigned
           path: ${{ runner.temp }}/ios-build
@@ -365,7 +366,7 @@ jobs:
           echo "branch=$SOURCE_BRANCH" >> $GITHUB_OUTPUT
 
       - name: Check out source branch
-        uses: actions/checkout@v4.2.0
+        uses: actions/checkout@v5
         with:
           ref: ${{ steps.source_branch.outputs.branch }}
           token: ${{ secrets.GH_PAT }}
