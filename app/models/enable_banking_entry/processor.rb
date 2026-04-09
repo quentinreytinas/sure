@@ -115,7 +115,7 @@ class EnableBankingEntry::Processor
       description = data[:description] || data[:transaction_description]
 
       if description.present?
-        remittance_name = remittance_name_candidate(excluding: [description])
+        remittance_name = remittance_name_candidate(excluding: [ description ])
         return remittance_name if prefer_remittance_name?(description, remittance_name)
         return description
       end
@@ -128,7 +128,7 @@ class EnableBankingEntry::Processor
       else
         data.dig(:creditor, :name) || data[:creditor_name]
       end
-      remittance_name = remittance_name_candidate(excluding: [description, counterparty])
+      remittance_name = remittance_name_candidate(excluding: [ description, counterparty ])
       counterparty_is_card_reference = counterparty.to_s.match?(CARD_REFERENCE_PATTERN)
       counterparty_looks_personal = personal_counterparty?(counterparty)
 
